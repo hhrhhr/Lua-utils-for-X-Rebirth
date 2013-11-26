@@ -6,7 +6,7 @@ local out = arg[3] or "."
 local cat = assert(io.open(out .. "/" .. num .. ".cat", "w+b"))
 local dat = assert(io.open(out .. "/" .. num .. ".dat", "w+b"))
 
-local time = 1384602480
+local time = os.time()
 local endl = string.char(0x0A)
 
 for line in io.lines(arg[1]) do
