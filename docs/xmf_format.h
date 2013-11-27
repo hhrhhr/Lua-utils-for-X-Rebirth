@@ -11,23 +11,24 @@ char unknown3;      // 0x00 (0)
 int vertexCount;
 int indexCount;     // (number of triangles) x 3
 int unknown4;       // 0x00000004 (4)
-int unknown5;       // 0x00000001 (1)
+int unknown5;       // 0 - models, 1 - collision ???
 char zeros[34];      // 34 x 0x00
+
 
 // chunks
 // absolute offset (64)
 {
-    int id1;            // 0|3|4|6|8|30
-    int part;           // 0x00, sometimes 0x01 (when current.id1 == prevouis.id1)
+    int id1;            // 0|3|4|6|8|30|...
+    int part;           // 0|1|2|... (++ when current.id1 == prevouis.id1)
     int offset          // relative to gzipped data start
     int one1;           // 0x00000001 (1)
     int zero;           // 0x00000000 (0)
-    int id2;            // 2|4|15|16|30|31|32
+    int id2;            // 2|4|15|16|30|31|32|...
     int size;           // packed size
     int elementCount;
     int bytesPerElement;
     int one2;           // 0x00000001 (1)
-    char unknownData[chunkSize - 40];
+    char unknownData[chunkSize - 40];   // 16|148
 }
 // ...
 // repeat (chunkCount) times
@@ -44,6 +45,7 @@ if materialCount > 0 {
     // ...
     // repeat (materialCount) times
 }
+
 
 // gzipped data
 // absolute offset (64 + (chunkCount*chunkSize) + (materialCount*136))
