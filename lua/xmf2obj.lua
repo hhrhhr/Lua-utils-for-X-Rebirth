@@ -251,44 +251,44 @@ assert(r:pos() == r:size(), "[ERR] pos != filesize: " .. r:pos() .. " != " .. r:
 -------------------------------------------------------------------------------
 
 os.execute("del /q /f " .. OUTDIR .. "\\chunk*.bin >nul 2>&1")
-if #vertex == 0 then
-    if OUTNAME == "dump" then
-        -- extract chunks data
-        r:seek(chunk.data_start)
-        io.write("\nunpack chunk data....")
-        for k, v in ipairs(chunk) do
-            io.write(" " .. k .. "...")
-            local name = string.format("%s/chunkdata#%d_(%d_%d_%d)_%dx%d.bin", 
-                                       OUTDIR, k, v.id1, v.part, v.id2, v.qty, v.bytes)
-            local buf = r:str(v.packed)
-            local unpacked = v.qty * v.bytes
-            local data = ffi.string(uncompress(buf, unpacked), unpacked)
-            local w = assert(io.open(name, "w+b"))
-            w:write(data)
-            w:close()
-        end
-        io.write(" done\n")
-        assert(r:pos() == r:size(), "[ERR] pos != filesize: " .. r:pos() .. " != " .. r:size())
-        -- copy binary chunk headers
-        r:seek(64)  -- jump back to begin
-        io.write("copy chunk headers...")
-        for i = 1, header.chunk_count do
-            io.write(" " .. i .. "...")
-            local name = string.format("%s/chunk#%d.bin", OUTDIR, i)
-            local data = r:str(header.chunk_size)
-            local w = assert(io.open(name, "w+b"))
-            w:write(data)
-            w:close()
-        end
-        io.write(" done\n")
-    else
-        io.write("\nconvert failed :(\n\n\n")
-    end
+if #vertex == 0 and OUTNAME ~= "dump" then
+    io.write("\nconvert failed :(\n\n")
     r:close()
     os.exit()
+elseif OUTNAME == "dump" then
+    -- extract chunks data
+    r:seek(chunk.data_start)
+    io.write("\nunpack chunk data....")
+    for k, v in ipairs(chunk) do
+        io.write(" " .. k .. "...")
+        local name = string.format("%s/chunkdata#%d_(%d_%d_%d)_%dx%d.bin", 
+                                   OUTDIR, k, v.id1, v.part, v.id2, v.qty, v.bytes)
+        local buf = r:str(v.packed)
+        local unpacked = v.qty * v.bytes
+        local data = ffi.string(uncompress(buf, unpacked), unpacked)
+        local w = assert(io.open(name, "w+b"))
+        w:write(data)
+        w:close()
+    end
+    io.write(" done\n")
+    assert(r:pos() == r:size(), "[ERR] pos != filesize: " .. r:pos() .. " != " .. r:size())
+    -- copy binary chunk headers
+    r:seek(64)  -- jump back to begin
+    io.write("copy chunk headers...")
+    for i = 1, header.chunk_count do
+        io.write(" " .. i .. "...")
+        local name = string.format("%s/chunk#%d.bin", OUTDIR, i)
+        local data = r:str(header.chunk_size)
+        local w = assert(io.open(name, "w+b"))
+        w:write(data)
+        w:close()
+    end
+    io.write(" done\n")
+    r:close()
+    os.exit()
+else
+    r:close()
 end
-
-r:close()
 
 
 -------------------------------------------------------------------------------
