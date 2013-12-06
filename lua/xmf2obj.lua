@@ -292,7 +292,7 @@ for k, v in ipairs(chunk) do
     if     v.id1 == 0 and v.part == 0 and v.id2 == 2 and v.bytes == 12 then
         io.write("OK, vertices (3*float32)...\n")
         while ptr < unpacked do
-            read_vertex_float32(data, ptr)  -- 8
+            read_vertex_float32(data)  -- 8
         end
     elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 12 then
         io.write("OK, vertices (3*float16), normals (3*byte)...\n")
@@ -419,7 +419,7 @@ assert(r:pos() == r:size(), "[ERR] pos != filesize: " .. r:pos() .. " != " .. r:
 
 os.execute("del /q /f " .. OUTDIR .. "\\chunk*.bin >nul 2>&1")
 if #vertex == 0 or OUTNAME == "dump" then
-    io.write("\n[ERR] vertex buffer empty\ndump unpacked data [(Y)es or Enter to exit]: ")
+    io.write("\n[ERR] vertex buffer empty\ndump unpacked data? [(Y)es or Enter to exit]: ")
     if io.read() ~= "Y" then
         r:close()
         io.write("-----------------------------------------------------------------\n\n\n")
