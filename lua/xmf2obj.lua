@@ -1,11 +1,16 @@
 package.path = "./?.lua;./lua/?.lua"
 
 if arg[1] == nil then
-    io.write("\n[INFO] usage: luajit xmf2obj.lua path_to_xml [output_path [output_name|dump]]\n\n")
+    io.write("\n[INFO] usage: luajit xmf2obj.lua path_to_xml [output_path [output_name|dump|-v32]]\n\n")
     os.exit()
 end
 local OUTDIR = arg[2] or "."
 local OUTNAME = arg[3] or "out"
+local V32 = false
+if arg[3] == "-v32" then
+    V32 = true
+    OUTNAME = "out"
+end
 
 local ffi = require("ffi")
 local zlib = ffi.load("zlib1")
@@ -36,14 +41,18 @@ r:idstring("XUMF")
 local header    = {}    -- header
 local chunk     = {}    -- chunks
 local vertex    = {}    -- vertices
+local vertex2   = {}    -- vertices
 local uv        = {}    -- UV
+local uv2       = {}    -- UV for decals ???
 local normal    = {}    -- normals
+local binormal  = {}    -- binormals (tangents ???)
+local vcolor    = {}    -- vertex colors
 local index     = {}    -- indexes
 local material  = {}    -- materials
 
 
 -------------------------------------------------------------------------------
--- read header
+-- header
 -------------------------------------------------------------------------------
 
 header.ver1         = r:uint16()    -- 0x0003 (3)
@@ -62,7 +71,7 @@ r:seek(64)                      -- skip 36 0x00
 
 
 -------------------------------------------------------------------------------
--- read chunks
+-- chunks
 -------------------------------------------------------------------------------
 
 for i = 1, header.chunk_count do
@@ -78,10 +87,10 @@ for i = 1, header.chunk_count do
     t.bytes     = r:uint32()
     t.one2      = r:uint32()
     if     header.chunk_size == 56 then
-        -- skip unknown bytes
+        -- unknown bytes
         r:seek(r:pos() + 16)
     elseif header.chunk_size == 188 then
-        -- skip unknown bytes
+        -- unknown bytes
         r:seek(r:pos() + 148)
     else
         assert(false, "[ERR] strange chunk size: " .. header.chunk_size)
@@ -100,7 +109,7 @@ if material.count > 0 then
         local t = {}
         t.begin = r:uint32()
         t.count = r:uint32()
-        t.name = r:str()
+        t.name = string.gsub(r:str(), "%.", "_")
         table.insert(material, t)
         r:seek(jmp)
     end
@@ -135,7 +144,6 @@ if material.count > 0 then
 end
 io.write("\n")
 
-
 if material.count == 0 then
     local t = {}
     t.begin = 0
@@ -157,30 +165,119 @@ typedef union {
       signed short sint16;
      unsigned char uint8;
        signed char sint8;
-             float real32;
+             float float32;
      unsigned char src[4];
 } unitConverter;
 ]]
 local uc = ffi.new("unitConverter")
-local function float(buf, ptr)
-    uc.src[0] = buf[ptr]
-    uc.src[1] = buf[ptr+1]
-    uc.src[2] = buf[ptr+2]
-    uc.src[3] = buf[ptr+3]
-    return uc.real32
+
+local function bit_extract (n, f, w)
+    w = w or 1
+    local mask = bit.lshift(4294967295, 1)
+    mask = bit.lshift(mask, w - 1)
+    mask = bit.bnot(mask)
+    local r = bit.rshift(n, f)
+    r = bit.band(r, mask)
+    return r
 end
-local function uint32(buf, ptr)
-    uc.src[0] = buf[ptr]
-    uc.src[1] = buf[ptr+1]
-    uc.src[2] = buf[ptr+2]
-    uc.src[3] = buf[ptr+3]
+
+local ptr = 0
+
+local function float16(buf)
+    uc.src[0] = buf[ptr + 0]
+    uc.src[1] = buf[ptr + 1]
+    uc.src[2] = 0
+    uc.src[3] = 0
+    local x = uc.uint32
+    local mantissa = bit.extract(x, 0, 10)
+    local exp      = bit.extract(x, 10, 5) - 15 + 127
+    local sign     = bit.extract(x, 15, 1)
+    x = sign
+    x = bit.lshift(x, 8)
+    x = bit.bor(x, exp)
+    x = bit.lshift(x, 10)
+    x = bit.bor(x, mantissa)
+    x = bit.lshift(x, 13)
+    uc.uint32 = x
+    ptr = ptr + 2
+    return uc.float32
+end
+local function float32(buf)
+    uc.src[0] = buf[ptr + 0]
+    uc.src[1] = buf[ptr + 1]
+    uc.src[2] = buf[ptr + 2]
+    uc.src[3] = buf[ptr + 3]
+    ptr = ptr + 4
+    return uc.float32
+end
+local function uint32(buf)
+    uc.src[0] = buf[ptr + 0]
+    uc.src[1] = buf[ptr + 1]
+    uc.src[2] = buf[ptr + 2]
+    uc.src[3] = buf[ptr + 3]
+    ptr = ptr + 4
     return uc.uint32
 end
-local function uint16(buf, ptr)
-    uc.src[0] = buf[ptr]
-    uc.src[1] = buf[ptr+1]
+local function uint16(buf)
+    uc.src[0] = buf[ptr + 0]
+    uc.src[1] = buf[ptr + 1]
+    ptr = ptr + 2
     return uc.uint16
 end
+
+
+local function read_vertex_float16(_data)
+    table.insert(vertex, -float16(_data))  -- mirror X axis
+    table.insert(vertex,  float16(_data))
+    table.insert(vertex,  float16(_data))
+    -- 0000
+    ptr = ptr + 2
+end
+
+local function read_vertex_float32(_data)
+    table.insert(vertex, -float32(_data))         -- mirror X axis
+    table.insert(vertex,  float32(_data))
+    table.insert(vertex,  float32(_data))
+end
+
+local function read_normal_float16(_data)
+    table.insert(normal, (127 - _data[ptr + 2]) / 128)    -- swap XZ
+    table.insert(normal, (_data[ptr + 1] - 127) / 128)
+    table.insert(normal, (_data[ptr + 0] - 127) / 128)
+    -- 00|FF ???
+    ptr = ptr + 4
+end
+
+local function read_binormal_float16(_data)
+    table.insert(binormal, (127 - _data[ptr + 2]) / 128)  -- swap XZ
+    table.insert(binormal, (_data[ptr + 1] - 127) / 128)
+    table.insert(binormal, (_data[ptr + 0] - 127) / 128)
+    -- 00|FF ???
+    ptr = ptr + 4
+end
+
+local function read_uv_float16(_data)
+    table.insert(uv,       float16(_data))
+    table.insert(uv, 1.0 - float16(_data))        -- mirror X axis
+end
+
+local function read_uv2_float16(_data)
+    table.insert(uv2,       float16(_data))
+    table.insert(uv2, 1.0 - float16(_data))       -- mirror X axis
+end
+
+local function read_index_uint16(_data)
+    table.insert(index, uint16(_data) + 1)
+    table.insert(index, uint16(_data) + 1)
+    table.insert(index, uint16(_data) + 1)
+end
+
+local function read_index_uint32(_data)
+    table.insert(index, uint32(_data) + 1)
+    table.insert(index, uint32(_data) + 1)
+    table.insert(index, uint32(_data) + 1)
+end
+
 
 
 io.write("\nparse chunks data...\n")
@@ -189,50 +286,119 @@ for k, v in ipairs(chunk) do
     local unpacked  = v.qty * v.bytes
     local buf       = r:str(v.packed)
     local data      = uncompress(buf, unpacked) -- uint8_t[]
-    local ptr       = 0
+    ptr = 0
     io.write(string.format("%d-%d-%d-%d:\t", v.id1, v.part, v.id2, v.bytes))
 
     if     v.id1 == 0 and v.part == 0 and v.id2 == 2 and v.bytes == 12 then
-        io.write("OK, vertices...\n")
+        io.write("OK, vertices (3*float32)...\n")
         while ptr < unpacked do
-            table.insert(vertex, -float(data, ptr))  -- mirror X axis
-            table.insert(vertex, float(data, ptr+4))
-            table.insert(vertex, float(data, ptr+8))
-            ptr = ptr + 12
+            read_vertex_float32(data, ptr)  -- 8
+        end
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 12 then
+        io.write("OK, vertices (3*float16), normals (3*byte)...\n")
+        while ptr < unpacked do
+            read_vertex_float16(data)  -- 8
+            read_normal_float16(data)  -- 4
+        end
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 20 then
+        io.write("OK, vertices (3*float16), 2 x normals (3*byte), uv (2*float16), 4 bytes ???...\n")
+        while ptr < unpacked do
+            read_vertex_float16(data)  -- 8
+            read_normal_float16(data)  -- 4
+            read_binormal_float16(data)-- 4
+            read_uv_float16(data)      -- 4
+        end
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 24 then
+        io.write("OK, vertices (3*float16), 2 x normals (3*byte), uv (2*float16), 4 bytes ???...\n")
+        while ptr < unpacked do
+            read_vertex_float16(data)  -- 8
+            read_normal_float16(data)  -- 4
+            read_binormal_float16(data)-- 4
+            read_uv_float16(data)      -- 4
+            -- xxxxxxxx
+            ptr = ptr + 4
         end
     elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 28 then
-        io.write("OK, vertices (!!! check result !!!)...\n")
+        io.write("OK, vertices")
+        if V32 == true then
+            io.write(" (3*float32), 2 x normals (3*byte), uv (2*float16), 8 bytes ???...\n")
+        else
+            io.write(" (3*float16), 2 x normals (3*byte), uv (2*float16), 8 bytes ???...\n")
+        end
         while ptr < unpacked do
-            table.insert(vertex, -float(data, ptr))  -- mirror X axis
-            table.insert(vertex, float(data, ptr+4))
-            table.insert(vertex, float(data, ptr+8))
-            -- skip 16 bytes
-            ptr = ptr + 12 + 16
+            if V32 == true then
+                read_vertex_float32(data)  -- 12
+            else
+                read_vertex_float16(data)  -- 8
+            end
+            read_normal_float16(data)      -- 4
+            read_binormal_float16(data)    -- 4
+            read_uv_float16(data)          -- 4
+            -- xxxxxxxx
+            ptr = ptr + 4
+            if V32 ~= true then
+                -- xxxxxxxx
+                ptr = ptr + 4
+            end
         end
     elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 32 then
-        io.write("OK, vertices (!!! check result !!!)...\n")
-        while ptr < unpacked do
-            table.insert(vertex, -float(data, ptr))  -- mirror X axis
-            table.insert(vertex, float(data, ptr+4))
-            table.insert(vertex, float(data, ptr+8))
-            -- skip 20 bytes
-            ptr = ptr + 12 + 20
+        io.write("OK, vertices")
+        if V32 == true then
+            io.write(" (3*float32), 2 x normals (3*byte), uv (2*float16), 12 bytes ???...\n")
+        else
+            io.write(" (3*float16), 2 x normals (3*byte), uv (2*float16), 12 bytes ???...\n")
         end
-    elseif v.id1 == 30 and v.part == 0 and v.id2 == 31 and v.bytes == 4 then
-        io.write("OK, indexes (4 bytes)...\n")
         while ptr < unpacked do
-            table.insert(index, uint32(data, ptr+0)+1)
-            table.insert(index, uint32(data, ptr+4)+1)
-            table.insert(index, uint32(data, ptr+8)+1)
+            if V32 == true then
+                read_vertex_float32(data)  -- 12
+            else
+                read_vertex_float16(data)  -- 8
+            end
+            read_normal_float16(data)      -- 4
+            read_binormal_float16(data)    -- 4
+            read_uv_float16(data)          -- 4
+            -- xxxxxxxx
+            -- xxxxxxxx
+            ptr = ptr + 8
+            if V32 ~= true then
+                -- xxxxxxxx
+                ptr = ptr + 4
+            end
+        end
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 36 then
+        io.write("OK, vertices (3*float32), 2 x normals (3*byte), uv (2*float16), 12 bytes ???...\n")
+        while ptr < unpacked do
+            read_vertex_float32(data)      -- 12
+            read_normal_float16(data)      -- 4
+            read_binormal_float16(data)    -- 4
+            read_uv_float16(data)          -- 4
+            -- xxxxxxxx
+            -- xxxxxxxx
+            -- xxxxxxxx
             ptr = ptr + 12
+        end
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 40 then
+        io.write("OK, vertices (3*float32), 2 x normals (3*byte), uv (2*float16), 16 bytes ???...\n")
+        while ptr < unpacked do
+            read_vertex_float32(data)      -- 12
+            read_normal_float16(data)      -- 4
+            read_binormal_float16(data)    -- 4
+            read_uv_float16(data)          -- 4
+            -- xxxxxxxx
+            -- xxxxxxxx
+            -- xxxxxxxx
+            -- xxxxxxxx
+            ptr = ptr + 16
         end
     elseif v.id1 == 30 and v.part == 0 and v.id2 == 30 and v.bytes == 2 then
         io.write("OK, indexes (2 bytes)...\n")
         while ptr < unpacked do
-            table.insert(index, uint16(data, ptr+0)+1)
-            table.insert(index, uint16(data, ptr+2)+1)
-            table.insert(index, uint16(data, ptr+4)+1)
-            ptr = ptr + 6
+            read_index_uint16(data)        -- 6
+        end
+    elseif v.id1 == 30 and v.part == 0 and v.id2 == 31 and v.bytes == 4 then
+        io.write("OK, indexes (4 bytes)...\n")
+        while ptr < unpacked do
+            read_index_uint32(data)        -- 12
         end
 --[[
     elseif v.id1 == XX and v.part == XX and v.id2 == XX and v.bytes == XX then
@@ -246,22 +412,25 @@ end
 assert(r:pos() == r:size(), "[ERR] pos != filesize: " .. r:pos() .. " != " .. r:size())
 
 
+
 -------------------------------------------------------------------------------
 -- dump unknown chunks data
 -------------------------------------------------------------------------------
 
 os.execute("del /q /f " .. OUTDIR .. "\\chunk*.bin >nul 2>&1")
-if #vertex == 0 and OUTNAME ~= "dump" then
-    io.write("\nconvert failed :(\n\n")
-    r:close()
-    os.exit()
-elseif OUTNAME == "dump" then
+if #vertex == 0 or OUTNAME == "dump" then
+    io.write("\n[ERR] vertex buffer empty\ndump unpacked data [(Y)es or Enter to exit]: ")
+    if io.read() ~= "Y" then
+        r:close()
+        io.write("-----------------------------------------------------------------\n\n\n")
+        os.exit()
+    end
     -- extract chunks data
     r:seek(chunk.data_start)
     io.write("\nunpack chunk data....")
     for k, v in ipairs(chunk) do
         io.write(" " .. k .. "...")
-        local name = string.format("%s/chunkdata#%d_(%d_%d_%d)_%dx%d.bin", 
+        local name = string.format("%s/chunkdata#%d_(%d_%d_%d)_%dx%d.bin",
                                    OUTDIR, k, v.id1, v.part, v.id2, v.qty, v.bytes)
         local buf = r:str(v.packed)
         local unpacked = v.qty * v.bytes
@@ -286,9 +455,10 @@ elseif OUTNAME == "dump" then
     io.write(" done\n")
     r:close()
     os.exit()
-else
-    r:close()
 end
+
+r:close()
+
 
 
 -------------------------------------------------------------------------------
@@ -297,17 +467,26 @@ end
 io.write("\ngenerate obj... ")
 
 local color = {
-    "0.00. 0.33. 0.64", "1.00. 0.95. 0.00", "0.93. 0.11. 0.14",
-    "0.00. 0.57. 0.81", "1.00. 0.76. 0.06", "0.89. 0.25. 0.59",
-    "0.00. 0.66. 0.56", "0.97. 0.56. 0.12", "0.65. 0.27. 0.60",
-    "0.55. 0.99. 0.03", "0.95. 0.44. 0.13", "0.42. 0.26. 0.61"
+    "0.00 0.33 0.64", "1.00 0.95 0.00", "0.93 0.11 0.14",
+    "0.00 0.57 0.81", "1.00 0.76 0.06", "0.89 0.25 0.59",
+    "0.00 0.66 0.56", "0.97 0.56 0.12", "0.65 0.27 0.60",
+    "0.55 0.99 0.03", "0.95 0.44 0.13", "0.42 0.26 0.61"
 }
 
 local w = assert(io.open(OUTDIR .. "/" .. OUTNAME .. ".mtl", "w+"))
 for k, v in ipairs(material) do
     w:write("newmtl " .. v.name .. "\n\n")
-    w:write("Kd " .. color[k] .. "\n")
+    --w:write("Kd " .. color[k] .. "\n")
+    w:write("Ka 0.00 0.00 0.00\n")
+    w:write("Kd 1.00 1.00 1.00\n")
+    w:write("Ks 1.00 1.00 1.00\n")
+    w:write("Ns 4.0\n")
     w:write("illum 2\n")
+    if material.count > 0 then
+        w:write("map_Kd tex\\" .. v.name .. "_diff.tga\n")
+        w:write("map_Ks tex\\" .. v.name .. "_spec.tga\n")
+        w:write("map_bump tex\\" .. v.name .. "_bump.tga\n")
+    end
     w:write("\n\n")
 end
 w:close()
@@ -317,17 +496,84 @@ w = assert(io.open(OUTDIR .. "/" .. OUTNAME .. ".obj", "w+"))
 w:write("mtllib ".. OUTNAME .. ".mtl\n\n")
 
 -- vertices
+w:write("# " .. vertex.count .. " vertices\n")
 for i = 1, vertex.count*3, 3 do
-    w:write(string.format("v %f %f %f\n", vertex[i], vertex[i+1], vertex[i+2]))
+    w:write(string.format("v %f %f %f", vertex[i], vertex[i+1], vertex[i+2]))
+    if #vcolor > 0 then
+        w:write(string.format(" %f %f %f %f", vcolor[i], vcolor[i+1], vcolor[i+2], vcolor[i+3]))
+    end
+    w:write("\n")
 end
 w:write("\n")
 
+-- uv
+if #uv > 0 then
+    w:write("# " .. #uv/2 .. " UV coordinates\n")
+    for i = 1, vertex.count*2, 2 do
+        w:write(string.format("vt %f %f\n", uv[i], uv[i+1]))
+    end
+end
+w:write("\n")
+
+--[[
+if #uv2 > 0 then
+    w:write("# " .. #uv2/2 .. " UV2 coordinates\n")
+    for i = 1, vertex.count*2, 2 do
+        --w:write(string.format("vt %f %f\n", uv2[i], uv2[i+1]))
+    end
+end
+w:write("\n")
+]]
+
+-- normals
+if #normal > 0 then
+    w:write("# " .. #normal/3 .. " normals\n")
+    for i = 1, vertex.count*3, 3 do
+        w:write(string.format("vn %f %f %f\n", normal[i], normal[i+1], normal[i+2]))
+    end
+end
+w:write("\n")
+
+--[[
+if #binormal > 0 then
+    w:write("# " .. #binormal/3 .. " binormals\n")
+    for i = 1, vertex.count*3, 3 do
+        w:write(string.format("#vn2 %f %f %f\n", binormal[i], binormal[i+1], binormal[i+2]))
+    end
+end
+w:write("\n")
+]]
+
 -- faces
 for k, v in ipairs(material) do
-    w:write("g group" .. k .. "\n\n")
+    w:write("g group" .. k .. "\n")
     w:write("usemtl " .. v.name .. "\n")
-    for i = v.begin+1, v.begin + v.count, 3 do
-        w:write(string.format("f %d %d %d\n", index[i], index[i+1], index[i+2]))
+    if #normal > 0 and #uv > 0 then
+        for i = v.begin+1, v.begin + v.count, 3 do
+            w:write(string.format("f %d/%d/%d %d/%d/%d %d/%d/%d\n",
+                index[i],   index[i],   index[i],
+                index[i+1], index[i+1], index[i+1],
+                index[i+2], index[i+2], index[i+2]))
+        end
+    elseif #uv > 0 then
+        for i = v.begin+1, v.begin + v.count, 3 do
+            w:write(string.format("f %d/%d %d/%d %d/%d\n",
+                index[i],   index[i],
+                index[i+1], index[i+1],
+                index[i+2], index[i+2]))
+        end
+    elseif #normal > 0 then
+        for i = v.begin+1, v.begin + v.count, 3 do
+            w:write(string.format("f %d//%d %d//%d %d//%d\n",
+                index[i],   index[i],
+                index[i+1], index[i+1],
+                index[i+2], index[i+2]))
+        end
+    else
+        for i = v.begin+1, v.begin + v.count, 3 do
+            w:write(string.format("f %d %d %d\n",
+                index[i], index[i+1], index[i+2]))
+        end
     end
 end
 
