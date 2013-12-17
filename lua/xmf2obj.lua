@@ -45,7 +45,7 @@ local vertex2   = {}    -- vertices
 local uv        = {}    -- UV
 local uv2       = {}    -- UV for decals ???
 local normal    = {}    -- normals
-local binormal  = {}    -- binormals (tangents ???)
+local tangent   = {}    -- tangents (tangents ???)
 local vcolor    = {}    -- vertex colors
 local index     = {}    -- indexes
 local material  = {}    -- materials
@@ -76,15 +76,15 @@ r:seek(64)                      -- skip 36 0x00
 
 for i = 1, header.chunk_count do
     local t = {}
-    t.id1       = r:uint32()
-    t.part      = r:uint32()
+    t.id1       = r:uint32()    -- 0|2|3|4|6|8|30
+    t.part      = r:uint32()    -- 0|1|2|3|4
     t.offset    = r:uint32()
     t.one1      = r:uint32()
     t.zero      = r:uint32()
-    t.id2       = r:uint32()
+    t.id2       = r:uint32()    -- 1|2|4|15|16|30|31|32
     t.packed    = r:uint32()
     t.qty       = r:uint32()
-    t.bytes     = r:uint32()
+    t.bytes     = r:uint32()    -- 2|4|8|12|16|20|24|28|32|36|40|44|48|60|64
     t.one2      = r:uint32()
     if     header.chunk_size == 56 then
         -- unknown bytes
@@ -248,10 +248,10 @@ local function read_normal_float16(_data)
     ptr = ptr + 4
 end
 
-local function read_binormal_float16(_data)
-    table.insert(binormal, (127 - _data[ptr + 2]) / 128)  -- swap XZ
-    table.insert(binormal, (_data[ptr + 1] - 127) / 128)
-    table.insert(binormal, (_data[ptr + 0] - 127) / 128)
+local function read_tangent_float16(_data)
+    table.insert(tangent, (127 - _data[ptr + 2]) / 128)  -- swap XZ
+    table.insert(tangent, (_data[ptr + 1] - 127) / 128)
+    table.insert(tangent, (_data[ptr + 0] - 127) / 128)
     -- 00|FF ???
     ptr = ptr + 4
 end
@@ -294,6 +294,28 @@ for k, v in ipairs(chunk) do
         while ptr < unpacked do
             read_vertex_float32(data)  -- 8
         end
+
+    elseif v.id1 == 0 and v.part == 0 and v.id2 == 16 and v.bytes == 8 then
+        io.write("test, vertices (3*float16)...\n")
+        while ptr < unpacked do
+            read_vertex_float16(data)  -- 8
+        end
+    elseif v.id1 == 3 and v.part == 0 and v.id2 == 4 and v.bytes == 4 then
+        io.write("test, normal (3*byte)...\n")
+        while ptr < unpacked do
+            read_normal_float16(data)  -- 8
+        end
+    elseif v.id1 == 4 and v.part == 0 and v.id2 == 4 and v.bytes == 4 then
+        io.write("test, tangent (3*byte)...\n")
+        while ptr < unpacked do
+            read_tangent_float16(data)  -- 8
+        end
+    elseif v.id1 == 6 and v.part == 0 and v.id2 == 15 and v.bytes == 4 then
+        io.write("test, uv (3*float16)...\n")
+        while ptr < unpacked do
+            read_uv_float16(data)  -- 8
+        end
+
     elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 12 then
         io.write("OK, vertices (3*float16), normals (3*byte)...\n")
         while ptr < unpacked do
@@ -305,7 +327,7 @@ for k, v in ipairs(chunk) do
         while ptr < unpacked do
             read_vertex_float16(data)  -- 8
             read_normal_float16(data)  -- 4
-            read_binormal_float16(data)-- 4
+            read_tangent_float16(data) -- 4
             read_uv_float16(data)      -- 4
         end
     elseif v.id1 == 0 and v.part == 0 and v.id2 == 32 and v.bytes == 24 then
@@ -313,7 +335,7 @@ for k, v in ipairs(chunk) do
         while ptr < unpacked do
             read_vertex_float16(data)  -- 8
             read_normal_float16(data)  -- 4
-            read_binormal_float16(data)-- 4
+            read_tangent_float16(data) -- 4
             read_uv_float16(data)      -- 4
             -- xxxxxxxx
             ptr = ptr + 4
@@ -332,7 +354,7 @@ for k, v in ipairs(chunk) do
                 read_vertex_float16(data)  -- 8
             end
             read_normal_float16(data)      -- 4
-            read_binormal_float16(data)    -- 4
+            read_tangent_float16(data)     -- 4
             read_uv_float16(data)          -- 4
             -- xxxxxxxx
             ptr = ptr + 4
@@ -355,7 +377,7 @@ for k, v in ipairs(chunk) do
                 read_vertex_float16(data)  -- 8
             end
             read_normal_float16(data)      -- 4
-            read_binormal_float16(data)    -- 4
+            read_tangent_float16(data)     -- 4
             read_uv_float16(data)          -- 4
             -- xxxxxxxx
             -- xxxxxxxx
@@ -370,7 +392,7 @@ for k, v in ipairs(chunk) do
         while ptr < unpacked do
             read_vertex_float32(data)      -- 12
             read_normal_float16(data)      -- 4
-            read_binormal_float16(data)    -- 4
+            read_tangent_float16(data)     -- 4
             read_uv_float16(data)          -- 4
             -- xxxxxxxx
             -- xxxxxxxx
@@ -382,7 +404,7 @@ for k, v in ipairs(chunk) do
         while ptr < unpacked do
             read_vertex_float32(data)      -- 12
             read_normal_float16(data)      -- 4
-            read_binormal_float16(data)    -- 4
+            read_tangent_float16(data)     -- 4
             read_uv_float16(data)          -- 4
             -- xxxxxxxx
             -- xxxxxxxx
@@ -535,10 +557,10 @@ end
 w:write("\n")
 
 --[[
-if #binormal > 0 then
-    w:write("# " .. #binormal/3 .. " binormals\n")
+if #tangent > 0 then
+    w:write("# " .. #tangent/3 .. " tangents\n")
     for i = 1, vertex.count*3, 3 do
-        w:write(string.format("#vn2 %f %f %f\n", binormal[i], binormal[i+1], binormal[i+2]))
+        w:write(string.format("#vn2 %f %f %f\n", tangent[i], tangent[i+1], tangent[i+2]))
     end
 end
 w:write("\n")
