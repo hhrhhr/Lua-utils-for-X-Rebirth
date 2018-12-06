@@ -1,5 +1,5 @@
-local filename = FNT or "fonts/rufont_32"
---local filename = FN or [[e:\X4\assets\fx\gui\fonts\textures\rufont_32.abc]]
+local filename = FNT
+
 local r
 
 -- binary reader for luajit
@@ -50,7 +50,7 @@ local function float()
 end
 
 -- read .abc
-r = assert(io.open(filename..".abc", "rb"))
+r = assert(io.open(filename, "rb"))
 
 local h = {
     [0] = uint32(),   -- ver
@@ -97,12 +97,8 @@ for i = 0, count-1 do
     charData[i] = c
 end
 
+charData[count] = h
+
 r:close()
 
--- get info
-local res = {}
-for i = 0, #charData do
-    local c = charData[i]
-    table.insert(res, {c.x0, c.y0, c.width, h[1], c.off, c.adv})
-end
-return res
+return charData
