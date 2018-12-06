@@ -99,7 +99,7 @@ for k, v in ipairs(t5) do
     
     -- find fallback char
     if SF < 0 then
-        if id + SF == 0 then SF = id end
+        if id + SF == 0 then SF = k end
     end
 
 --    print(k, id, x0, y0, x1, y1, off, width, adv, v.page)
@@ -108,8 +108,6 @@ end
 
 w = io.open(FNT..".abc", "w+b")
 
--- ver: 9, height: 52, outX: 0, outY: 0, lineH: 52, base: 41, 
--- spcX: 11, spcY: 9, texW: 1024, textH: 1024
 -- header
 
 uint32(9)               -- ver
