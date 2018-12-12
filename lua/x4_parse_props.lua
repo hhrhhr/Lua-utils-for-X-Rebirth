@@ -16,8 +16,8 @@ local header = {
     },
     ["ship"] = {0,
         {"name", "missile", "hull", "secrecy", "purpose", "people", "i_pitch",
-            "i_yaw", "i_roll", "d_fwd", "d_rev", "d_hor", "d_ver", "d_pitch", "d_yaw", "d_roll",
-            "thruster", "tags", "macro"}
+            "i_yaw", "i_roll", "d_fwd", "d_rev", "d_hor", "d_ver", "d_pitch",
+            "d_yaw", "d_roll", "thruster", "tags", "macro"}
     },
 }
 
@@ -63,7 +63,7 @@ local function load_xml(filename)
         xml = f:read("a")
         f:close()
     else
---        io.stderr:write(e, "\n")
+        --        io.stderr:write(e, "\n")
         xml = ""
     end
     handler = xml_tree:new()
@@ -83,10 +83,10 @@ local function parse_shield(m)
 
     local p = prop.identification._attr
     table.insert(t, L:get(p.name or "--"))
---    io.write(L:get(p.basename or "--"), "\t") -- 'Shield Generator'
---    io.write(L:get(p.shortname or "--"), "\t") -- 'Shield Mk?'
+    --    io.write(L:get(p.basename or "--"), "\t") -- 'Shield Generator'
+    --    io.write(L:get(p.shortname or "--"), "\t") -- 'Shield Mk?'
     table.insert(t, p.makerrace)
---    io.write(L:get(p.description or "--"), "\t") -- 'No information available'
+    --    io.write(L:get(p.description or "--"), "\t") -- 'No information available'
     table.insert(t, p.mk)
 
     p = prop.recharge._attr
@@ -113,17 +113,17 @@ local function parse_engine(m)
 
     local p = prop.identification and prop.identification._attr or {}
     table.insert(t, L:get(p.name or "--"))
---    table.insert(t, L:get(p.basename or "--"))
---    table.insert(t, L:get(p.shortname or "--"))
+    --    table.insert(t, L:get(p.basename or "--"))
+    --    table.insert(t, L:get(p.shortname or "--"))
     table.insert(t, (p.makerrace or "--"))
---    table.insert(t, L:get(p.description or "--"))
+    --    table.insert(t, L:get(p.description or "--"))
     table.insert(t, (p.mk or "--"))
 
     p = prop.boost and prop.boost._attr or {}
     table.insert(t, (p.duration or "--"))
     table.insert(t, (p.thrust or "--"))
---    table.insert(t, (p.attack or "--")) -- 0.25
---    table.insert(t, (p.release or "--")) -- 1
+    --    table.insert(t, (p.attack or "--")) -- 0.25
+    --    table.insert(t, (p.release or "--")) -- 1
 
     p = prop.travel and prop.travel._attr or {}
     table.insert(t, p.charge or "--")
@@ -147,10 +147,10 @@ local function parse_thruster(m)
 
     local p = prop.identification and prop.identification._attr or {}
     table.insert(t, L:get(p.name or "--"))
---    table.insert(t, L:get(p.basename or "--"))
---    table.insert(t, L:get(p.shortname or "--"))
---    table.insert(t, (p.unique or "--")) -- 0
---    table.insert(t, L:get(p.description or "--"))
+    --    table.insert(t, L:get(p.basename or "--"))
+    --    table.insert(t, L:get(p.shortname or "--"))
+    --    table.insert(t, (p.unique or "--")) -- 0
+    --    table.insert(t, L:get(p.description or "--"))
     table.insert(t, (p.mk or "--"))
 
     p = prop.thrust and prop.thrust._attr or {}
@@ -163,8 +163,8 @@ local function parse_thruster(m)
     table.insert(t, (p.pitch or "--"))
     table.insert(t, (p.roll or "--"))
 
---    p = prop.hull and prop.hull._attr or {}
---    table.insert(t, (p.integrated or "0")) -- 1
+    --    p = prop.hull and prop.hull._attr or {}
+    --    table.insert(t, (p.integrated or "0")) -- 1
 
     table.insert(t, m._attr.name)
 
@@ -178,11 +178,11 @@ local function parse_ship(m)
 
     local p = prop.identification and prop.identification._attr or {}
     table.insert(t, L:get(p.name or "--"))
---    table.insert(t, L:get(p.basename or "--"))
---    table.insert(t, L:get(p.description or "--"))
---    table.insert(t, L:get(p.variation or "--"))
---    table.insert(t, L:get(p.shortvariation or "--"))
---    table.insert(t, L:get(p.icon or "--"))
+    --    table.insert(t, L:get(p.basename or "--"))
+    --    table.insert(t, L:get(p.description or "--"))
+    --    table.insert(t, L:get(p.variation or "--"))
+    --    table.insert(t, L:get(p.shortvariation or "--"))
+    --    table.insert(t, L:get(p.icon or "--"))
 
     p = prop.storage and prop.storage._attr or {}
     table.insert(t, p.missile or "--")
@@ -230,11 +230,11 @@ local function parse_macro(macro)
     local m = macro._attr
     if m then
         local class = m.class
-        if "_shieldgenerator" == class then
+        if "shieldgenerator" == class then
             if m.name:find("test") ~= 1 then
                 parse_shield(macro)
             end
-        elseif "_engine" == class then
+        elseif "engine" == class then
             if m.name:find("eng") == 1 then
                 parse_engine(macro)
             elseif m.name:find("thr") == 1 then
