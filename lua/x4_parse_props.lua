@@ -2,11 +2,23 @@ local conf = require("x4_config")
 
 local header = {
     ["shieldgenerator"] = {0,
-        {"name", "race", "mk", "recharge", "rate", "delay", "time", "hull", "tresh.", "int.", "macro"}},
+        {"name", "race", "mk", "recharge", "rate", "delay", "time", "hull",
+            "tresh.", "int.", "macro"}
+    },
     ["engine"] = {0,
-        {"name", "race", "mk", "b_duration", "b_thrust", "tr_duration", "tr_thrust", "tr_attack", "tr_release", "thr_forward", "thr_reverse", "macro"}},
+        {"name", "race", "mk", "b_duration", "b_thrust", "tr_duration",
+            "tr_thrust", "tr_attack", "tr_release", "thr_forward", "thr_reverse",
+            "macro"}
+    },
     ["thruster"] = {0,
-        {"name", "mk", "strafe", "pitch", "yaw", "roll", "ang_pitch", "ang_roll", "macro"}},
+        {"name", "mk", "strafe", "pitch", "yaw", "roll", "ang_pitch",
+            "ang_roll", "macro"}
+    },
+    ["ship"] = {0,
+        {"name", "missile", "hull", "secrecy", "purpose", "people", "i_pitch",
+            "i_yaw", "i_roll", "d_fwd", "d_rev", "d_hor", "d_ver", "d_pitch", "d_yaw", "d_roll",
+            "thruster", "tags", "macro"}
+    },
 }
 
 
@@ -23,8 +35,12 @@ function L:get(p, t)
     local c
     while 0 ~= c do
         s, c = s:gsub("({(%d*),[ ]-(%d+)})", Lget)  -- перенаправление вида '{page,id}' или '{,id}'
+        s = s:gsub("\\%(", "<<")  -- убиваем скобки
+        s = s:gsub("\\%)", ">>")  -- убиваем скобки
     end
-    s = s:gsub("(%([^%(]+%))", "")  -- убиваем скобки
+    s = s:gsub("(%([^%)]+%))", "")  -- убиваем скобки
+    s = s:gsub("<<", "(")  -- убиваем скобки
+    s = s:gsub(">>", ")")  -- убиваем скобки
 
     return s
 end
@@ -155,19 +171,78 @@ local function parse_thruster(m)
     header["thruster"][1]:write(table.concat(t, "\t"), "\n")
 end
 
+local function parse_ship(m)
+    print(m._attr.name, m._attr.class)
+    local t = {}
+    local prop = m.properties
+
+    local p = prop.identification and prop.identification._attr or {}
+    table.insert(t, L:get(p.name or "--"))
+--    table.insert(t, L:get(p.basename or "--"))
+--    table.insert(t, L:get(p.description or "--"))
+--    table.insert(t, L:get(p.variation or "--"))
+--    table.insert(t, L:get(p.shortvariation or "--"))
+--    table.insert(t, L:get(p.icon or "--"))
+
+    p = prop.storage and prop.storage._attr or {}
+    table.insert(t, p.missile or "--")
+
+    p = prop.hull and prop.hull._attr or {}
+    table.insert(t, p.max or "--")
+
+    p = prop.secrecy and prop.secrecy._attr or {}
+    table.insert(t, p.level or "--")
+
+    p = prop.purpose and prop.purpose._attr or {}
+    table.insert(t, p.primary or "--")
+
+    p = prop.people and prop.people._attr or {}
+    table.insert(t, p.capacity or "--")
+
+    p = (prop.physics and prop.physics.inertia and prop.physics.inertia._attr) or {}
+    table.insert(t, p.pitch or "--")
+    table.insert(t, p.yaw or "--")
+    table.insert(t, p.roll or "--")
+
+    p = (prop.physics and prop.physics.drag and prop.physics.drag._attr) or {}
+    table.insert(t, p.forward or "--")
+    table.insert(t, p.reverse or "--")
+    table.insert(t, p.horizontal or "--")
+    table.insert(t, p.vertical or "--")
+    table.insert(t, p.pitch or "--")
+    table.insert(t, p.yaw or "--")
+    table.insert(t, p.roll or "--")
+
+    p = prop.thruster and prop.thruster._attr or {}
+    table.insert(t, p.tags or "--")
+
+    p = prop.ship and prop.ship._attr or {}
+    table.insert(t, p.type or "--")
+
+
+    table.insert(t, m._attr.name)
+
+    header["ship"][1]:write(table.concat(t, "\t"), "\n")
+end
+
+
 local function parse_macro(macro)
     local m = macro._attr
     if m then
         local class = m.class
-        if "shieldgenerator" == class then
-            if m.name:find("test") ~= 1 then    -- skip 'testshieldgenerator'
+        if "_shieldgenerator" == class then
+            if m.name:find("test") ~= 1 then
                 parse_shield(macro)
             end
-        elseif "engine" == class then
+        elseif "_engine" == class then
             if m.name:find("eng") == 1 then
                 parse_engine(macro)
             elseif m.name:find("thr") == 1 then
                 parse_thruster(macro)
+            end
+        elseif class and "ship_" == class:sub(1, 5) then
+            if m.name:find("dummy") ~= 1 then
+                parse_ship(macro)
             end
         end
     end
