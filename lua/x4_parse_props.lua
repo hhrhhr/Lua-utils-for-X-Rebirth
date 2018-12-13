@@ -1,23 +1,21 @@
 local conf = require("x4_config")
 
 local header = {
-    ["shieldgenerator"] = {0,
-        {"name", "race", "mk", "recharge", "rate", "delay", "time", "hull",
-            "tresh.", "int.", "macro"}
+    ["shield"] = {
+        f_handle = 0,
+        str = {"name", "race", "mk", "recharge", "rate", "delay", "time", "hull", "tresh", "int", "macro"}
     },
-    ["engine"] = {0,
-        {"name", "race", "mk", "b_duration", "b_thrust", "tr_duration",
-            "tr_thrust", "tr_attack", "tr_release", "thr_forward", "thr_reverse",
-            "macro"}
+    ["engine"] = {
+        f_handle = 0,
+        str = {"name", "race", "mk", "bst_duration", "bst_thrust", "trv_duration", "trv_thrust", "trv_attack", "trv_release", "thr_forward", "thr_reverse", "macro"}
     },
-    ["thruster"] = {0,
-        {"name", "mk", "strafe", "pitch", "yaw", "roll", "ang_pitch",
-            "ang_roll", "macro"}
+    ["thruster"] = {
+        f_handle = 0,
+        str = {"name", "mk", "strafe", "pitch", "yaw", "roll", "ang_pitch", "ang_roll", "macro"}
     },
-    ["ship"] = {0,
-        {"name", "missile", "hull", "secrecy", "purpose", "people", "i_pitch",
-            "i_yaw", "i_roll", "d_fwd", "d_rev", "d_hor", "d_ver", "d_pitch",
-            "d_yaw", "d_roll", "thruster", "tags", "macro"}
+    ["ship"] = {
+        f_handle = 0, 
+        str ={"basename", "variation", "exp_dmg", "missile", "hull", "secrecy", "purpose", "people", "mass", "thruster", "tags", "engines", "weapons", "turrets", "shields", "cargo", "type", "i_pitch", "i_yaw", "i_roll", "d_fwd", "d_rev", "d_hor", "d_ver", "d_pitch", "d_yaw", "d_roll", "macro"}
     },
 }
 
@@ -34,16 +32,18 @@ function L:get(p, t)
     local s = (p and t) and L[p][t] or p
     local c
     while 0 ~= c do
-        s, c = s:gsub("({(%d*),[ ]-(%d+)})", Lget)  -- перенаправление вида '{page,id}' или '{,id}'
-        s = s:gsub("\\%(", "<<")  -- убиваем скобки
-        s = s:gsub("\\%)", ">>")  -- убиваем скобки
+        -- '{page,id}', '{,id}', '{page, id}', '{, id}'
+        s, c = s:gsub("({(%d*),[ ]-(%d+)})", Lget)
+        s = s:gsub("\\%(", "<<")
+        s = s:gsub("\\%)", ">>")
     end
     s = s:gsub("(%([^%)]+%))", "")  -- убиваем скобки
-    s = s:gsub("<<", "(")  -- убиваем скобки
-    s = s:gsub(">>", ")")  -- убиваем скобки
+    s = s:gsub("<<", "(")
+    s = s:gsub(">>", ")")
 
     return s
 end
+
 
 --[[ xml stuff ]]--------------------------------------------------------------
 
@@ -63,7 +63,7 @@ local function load_xml(filename)
         xml = f:read("a")
         f:close()
     else
-        --        io.stderr:write(e, "\n")
+        -- io.stderr:write(e, "\n")
         xml = ""
     end
     handler = xml_tree:new()
@@ -74,19 +74,75 @@ local function load_xml(filename)
 end
 
 
+--[[ index stuff ]]--------------------------------------------------------
+
+local index = { macro = {}, component = {} }
+
+local function parse_index()
+    local h = load_xml("index/components.xml")
+    local entry = h and h.root.index.entry
+    for i = 1, #entry do
+        local e = entry[i]._attr
+        local fn = e.value:gsub("\\\\", "/")
+        fn = fn:gsub("\\", "/")
+        index.component[e.name] = e.value
+    end
+
+    h = load_xml("index/macros.xml")
+    entry = h and h.root.index.entry
+    for i = 1, #entry do
+        local e = entry[i]._attr
+        local fn = e.value:gsub("\\\\", "/")
+        fn = fn:gsub("\\", "/")
+        index.macro[e.name] = e.value
+    end
+end
+
+
+local function count_tags(model)
+    local fn = index.component[model]
+    local h = load_xml(fn .. ".xml")
+    local c = h.root.components.component
+    local a = c._attr
+    --    assert(model == a.name)
+    local e, w, t, s = 0, 0, 0, 0
+    local con = c.connections.connection
+    for i = 1, #con do
+        local c = con[i]
+        local tags = c._attr.tags
+        for tag in string.gmatch(tags, "[^ ]+") do
+            if "engine" == tag then e = e + 1
+            elseif "weapon" == tag then w = w + 1
+            elseif "turret" == tag then t = t + 1
+            elseif "shield" == tag then s = s + 1
+            end
+        end
+    end
+    return e, w, t, s
+end
+
+local function parse_storage(s)
+    local fn = index.macro[s]
+    local h = load_xml(fn .. ".xml")
+    local p = h.root.macros.macro.properties
+    local c = p.cargo._attr
+    return c.max, c.tags
+end
+
+
 --[[ parse all macros ]]-------------------------------------------------------
 
 local function parse_shield(m)
-    print(m._attr.name)
+    print(m._attr.name, m._attr.class)
     local t = {}
     local prop = m.properties
 
     local p = prop.identification._attr
     table.insert(t, L:get(p.name or "--"))
-    --    io.write(L:get(p.basename or "--"), "\t") -- 'Shield Generator'
-    --    io.write(L:get(p.shortname or "--"), "\t") -- 'Shield Mk?'
+    --table.insert(t, L:get(p.basename or "--")) -- 'Shield Generator'
+    --table.insert(t, L:get(p.shortname or "--")) -- 'Shield Mk?'
     table.insert(t, p.makerrace)
-    --    io.write(L:get(p.description or "--"), "\t") -- 'No information available'
+    --table.insert(t, L:get(p.description or "--")) -- 'No information available'
     table.insert(t, p.mk)
 
     p = prop.recharge._attr
@@ -103,27 +159,27 @@ local function parse_shield(m)
 
     table.insert(t, m._attr.name)
 
-    header["shieldgenerator"][1]:write(table.concat(t, "\t"), "\n")
+    header["shield"].f_handle:write(table.concat(t, "\t"), "\n")
 end
 
 local function parse_engine(m)
-    print(m._attr.name)
+    print(m._attr.name, m._attr.class)
     local t = {}
     local prop = m.properties
 
     local p = prop.identification and prop.identification._attr or {}
     table.insert(t, L:get(p.name or "--"))
-    --    table.insert(t, L:get(p.basename or "--"))
-    --    table.insert(t, L:get(p.shortname or "--"))
+    --table.insert(t, L:get(p.basename or "--"))
+    --table.insert(t, L:get(p.shortname or "--"))
     table.insert(t, (p.makerrace or "--"))
-    --    table.insert(t, L:get(p.description or "--"))
+    --table.insert(t, L:get(p.description or "--"))
     table.insert(t, (p.mk or "--"))
 
     p = prop.boost and prop.boost._attr or {}
     table.insert(t, (p.duration or "--"))
     table.insert(t, (p.thrust or "--"))
-    --    table.insert(t, (p.attack or "--")) -- 0.25
-    --    table.insert(t, (p.release or "--")) -- 1
+    --table.insert(t, (p.attack or "--")) -- 0.25
+    --table.insert(t, (p.release or "--")) -- 1
 
     p = prop.travel and prop.travel._attr or {}
     table.insert(t, p.charge or "--")
@@ -137,11 +193,11 @@ local function parse_engine(m)
 
     table.insert(t, m._attr.name)
 
-    header["engine"][1]:write(table.concat(t, "\t"), "\n")
+    header["engine"].f_handle:write(table.concat(t, "\t"), "\n")
 end
 
 local function parse_thruster(m)
-    print(m._attr.name)
+    print(m._attr.name, m._attr.class)
     local t = {}
     local prop = m.properties
 
@@ -168,21 +224,33 @@ local function parse_thruster(m)
 
     table.insert(t, m._attr.name)
 
-    header["thruster"][1]:write(table.concat(t, "\t"), "\n")
+    header["thruster"].f_handle:write(table.concat(t, "\t"), "\n")
 end
 
 local function parse_ship(m)
     print(m._attr.name, m._attr.class)
     local t = {}
+
     local prop = m.properties
 
     local p = prop.identification and prop.identification._attr or {}
-    table.insert(t, L:get(p.name or "--"))
+    local b, s = p.basename, p.shortvariation
+    if b and s then
+        table.insert(t, L:get(b))
+        table.insert(t, L:get(s))
+    else
+        table.insert(t, L:get(p.name))
+        table.insert(t, "--")
+    end
+    --    table.insert(t, L:get(p.name or "--"))
     --    table.insert(t, L:get(p.basename or "--"))
     --    table.insert(t, L:get(p.description or "--"))
     --    table.insert(t, L:get(p.variation or "--"))
     --    table.insert(t, L:get(p.shortvariation or "--"))
     --    table.insert(t, L:get(p.icon or "--"))
+
+    p = prop.explosiondamage and prop.explosiondamage._attr or {}
+    table.insert(t, p.value or "--")
 
     p = prop.storage and prop.storage._attr or {}
     table.insert(t, p.missile or "--")
@@ -199,6 +267,34 @@ local function parse_ship(m)
     p = prop.people and prop.people._attr or {}
     table.insert(t, p.capacity or "--")
 
+    p = (prop.physics and prop.physics._attr) or {}
+    table.insert(t, p.mass or "--")
+
+    p = prop.thruster and prop.thruster._attr or {}
+    table.insert(t, p.tags or "--")
+
+    p = prop.ship and prop.ship._attr or {}
+    table.insert(t, p.type or "--")
+
+    local model = m.component._attr.ref
+    local engines, weapons, turrets, shields = count_tags(model)
+    table.insert(t, engines)
+    table.insert(t, weapons)
+    table.insert(t, turrets)
+    table.insert(t, shields)
+
+    local max, tags
+    local con = m.connections.connection
+    for i = 1, #con do
+        local c = con[i]
+        if 1 == c._attr.ref:find("con_storage") then
+            max, tags = parse_storage(c.macro._attr.ref)
+            break
+        end
+    end
+    table.insert(t, max or "--")
+    table.insert(t, tags or "--")
+
     p = (prop.physics and prop.physics.inertia and prop.physics.inertia._attr) or {}
     table.insert(t, p.pitch or "--")
     table.insert(t, p.yaw or "--")
@@ -213,16 +309,9 @@ local function parse_ship(m)
     table.insert(t, p.yaw or "--")
     table.insert(t, p.roll or "--")
 
-    p = prop.thruster and prop.thruster._attr or {}
-    table.insert(t, p.tags or "--")
-
-    p = prop.ship and prop.ship._attr or {}
-    table.insert(t, p.type or "--")
-
-
     table.insert(t, m._attr.name)
 
-    header["ship"][1]:write(table.concat(t, "\t"), "\n")
+    header["ship"].f_handle:write(table.concat(t, "\t"), "\n")
 end
 
 
@@ -231,32 +320,27 @@ local function parse_macro(macro)
     if m then
         local class = m.class
         if "shieldgenerator" == class then
-            if m.name:find("test") ~= 1 then
+            if 1 ~= m.name:find("test") then
                 parse_shield(macro)
             end
         elseif "engine" == class then
-            if m.name:find("eng") == 1 then
+            if 1 == m.name:find("eng") then
                 parse_engine(macro)
-            elseif m.name:find("thr") == 1 then
+            elseif 1 == m.name:find("thr") then
                 parse_thruster(macro)
             end
         elseif class and "ship_" == class:sub(1, 5) then
-            if m.name:find("dummy") ~= 1 then
+            if 1 ~= m.name:find("dummy") then
                 parse_ship(macro)
             end
         end
     end
 end
 
-local function start_parse()
-    local h = load_xml("index/macros.xml")
-    local entry = h and h.root.index.entry
-    for i = 1, #entry do
-        local e = entry[i]._attr
-        local fn = e.value:gsub("\\\\", "/")
-        fn = fn:gsub("\\", "/")
-        local h = load_xml(fn .. ".xml")
 
+local function parse_start()
+    for name, value in pairs(index.macro) do
+        local h = load_xml(value .. ".xml")
         local macro = h and h.root.macros and h.root.macros.macro
         if macro then
             local count = #macro
@@ -275,12 +359,13 @@ end
 --[[ main ]]-------------------------------------------------------------------
 
 for k, v in pairs(header) do
-    v[1] = io.open(k .. ".csv", "w+b")
-    v[1]:write(table.concat(v[2], "\t"), "\n")
+    v.f_handle = io.open(k .. ".csv", "w+b")
+    v.f_handle:write(table.concat(v.str, "\t"), "\n")
 end
 
-start_parse()
+parse_index()
+parse_start()
 
-for k, v in pairs(header) do
-    v[1]:close()
+for _, v in pairs(header) do
+    v.f_handle:close()
 end
