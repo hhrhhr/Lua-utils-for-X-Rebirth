@@ -24,9 +24,9 @@ header["ship"] = {
     f_handle = 0, str = {
         "basename", "var", "purpose", "type", "class", "hull", "crew",
         "c_vol", "c_type", "eng", "wpn", "turr", "shld", "mis",
-        --  |     hangar(s)    |  | dock(s)  |
         "a_M", "a_S", "a_XS", "d_M", "d_S",
-        "scan", "expl", "mass", "i_PY", "i_R", "d_fwd", "d_rev", "d_str", "d_PYR", "macro"
+        "scan", "expl", "mass", "i_PY", "i_R",
+        "d_fwd", "d_rev", "d_str", "d_PYR", "macro"
     }
 }
 
@@ -117,6 +117,11 @@ local function parse_index()
     end
 end
 
+
+local function check_zero(val)
+    return 0 == val and "--" or tostring(val)
+end
+
 local function count_mount(model, mount)
     local fn = index.component[model]
     local h = load_xml(fn .. ".xml")
@@ -134,10 +139,10 @@ local function count_mount(model, mount)
             end
         end
     end
-    mount[1] = 0 == e and "--" or tostring(e)
-    mount[2] = 0 == w and "--" or tostring(w)
-    mount[3] = 0 == t and "--" or tostring(t)
-    mount[4] = 0 == s and "--" or tostring(s)
+    mount[1] = check_zero(e)
+    mount[2] = check_zero(w)
+    mount[3] = check_zero(t)
+    mount[4] = check_zero(s)
 end
 
 local function parse_dockarea(m, dock)
@@ -173,7 +178,7 @@ local function parse_storage(m, cargo)
     local h = load_xml(fn .. ".xml")
     local p = h.root.macros.macro.properties
     local c = p.cargo._attr
-    cargo["vol"] = c.max or "--"
+    cargo["vol"] = check_zero(c.max)
     cargo["type"] = c.tags or "--"
     return cargo
 end
@@ -215,9 +220,9 @@ local function parse_shield(m)
     table.insert(t, (p.max / p.rate / 86400))
 
     p = prop.hull._attr
-    table.insert(t, (p.max or "0"))
-    table.insert(t, (p.threshold or "0"))
-    table.insert(t, (p.integrated or "0"))
+    table.insert(t, (p.max or "--"))
+    table.insert(t, (p.threshold or "--"))
+    table.insert(t, (p.integrated or "--"))
 
     table.insert(t, m._attr.name)
 
@@ -331,13 +336,13 @@ local function parse_ship(m)
 
         end
     end
-    hangar["dock_m"] = (0 == hangar["dock_m"]) and "--" or tostring(hangar["dock_m"])
-    hangar["dock_s"] = (0 == hangar["dock_s"]) and "--" or tostring(hangar["dock_s"])
-    hangar["dock_xs"] = (0 == hangar["dock_xs"]) and "--" or tostring(hangar["dock_xs"])
-    dock["dock_m"] = (0 == dock["dock_m"]) and "--" or tostring(dock["dock_m"])
-    dock["dock_s"] = (0 == dock["dock_s"]) and "--" or tostring(dock["dock_s"])
-    cargo["vol"] = (0 == cargo["vol"]) and "--" or tostring(cargo["vol"])
-    cargo["type"] = (0 == cargo["type"]) and "--" or tostring(cargo["type"])
+    hangar["dock_m"] = check_zero(hangar["dock_m"])
+    hangar["dock_s"] = check_zero(hangar["dock_s"])
+    hangar["dock_xs"] = check_zero(hangar["dock_xs"])
+    dock["dock_m"] = check_zero(dock["dock_m"])
+    dock["dock_s"] = check_zero(dock["dock_s"])
+    cargo["vol"] = check_zero(cargo["vol"])
+    cargo["type"] = check_zero(cargo["type"])
 
     local prop = m.properties
 
