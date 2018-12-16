@@ -16,24 +16,24 @@ header["engine"] = {
 }
 header["thruster"] = {
     f_handle = 0, str = {
-        "name", "mk", "strafe", "pitch", "yaw", "roll", "ang_pitch",
+        "name", "mk", "thr_strafe", "thr_pitch", "thr_yaw", "thr_roll", "ang_pitch",
         "ang_roll", "macro"
     }
 }
 header["ship"] = {
     f_handle = 0, str = {
         "basename", "var", "purpose", "type", "class", "hull", "crew",
-        "c_vol", "c_type", "eng", "wpn", "turr", "shld", "mis",
-        "a_M", "a_S", "a_XS", "d_M", "d_S",
-        "scan", "expl", "mass", "i_PY", "i_R",
-        "d_fwd", "d_rev", "d_str", "d_PYR", "macro"
+        "cargo_vol", "cargo_type", "engines", "weapons", "turrets", "shields", "missiles",
+        "angar_M", "angar_S", "angar_XS", "dock_M", "dock_S",
+        "scan_lvl", "expl_dmg", "mass", "inert_PY", "inert_R",
+        "drag_fwd", "drag_rev", "drag_strafe", "drag_PYR", "macro"
     }
 }
 
 
 --[[ lang stuff ]]-------------------------------------------------------------
 
-local L = require(conf.lang)
+local L1 = require(conf.lang1)
 local L2 = require(conf.lang2)
 
 local function L_get(p, t, l)
@@ -42,7 +42,7 @@ local function L_get(p, t, l)
         if l then
             return L2[tonumber(b)][tonumber(c)]
         else
-            return L[tonumber(b)][tonumber(c)]
+            return L1[tonumber(b)][tonumber(c)]
         end
     end
     local s = (p and t) and L[p][t] or p
@@ -95,35 +95,25 @@ end
 
 --[[ index stuff ]]--------------------------------------------------------
 
-local index = { macro = {}, component = {} }
+local index
 
 local function parse_index()
-    local h = load_xml("index/components.xml")
-    local entry = h and h.root.index.entry
-    for i = 1, #entry do
-        local e = entry[i]._attr
-        local fn = e.value:gsub("\\\\", "/")
-        fn = fn:gsub("\\", "/")
-        index.component[e.name] = e.value
+    index = io.open("index.luac")
+    if not index then
+        print("generate index...")
+        dofile("x4_parse_index.lua")
+    else
+        index:close()
     end
-
-    h = load_xml("index/macros.xml")
-    entry = h and h.root.index.entry
-    for i = 1, #entry do
-        local e = entry[i]._attr
-        local fn = e.value:gsub("\\\\", "/")
-        fn = fn:gsub("\\", "/")
-        index.macro[e.name] = e.value
-    end
+    index = loadfile("index.luac")()
 end
-
 
 local function check_zero(val)
     return 0 == val and "--" or tostring(val)
 end
 
 local function count_mount(model, mount)
-    local fn = index.component[model]
+    local fn = index.component[model][2]
     local h = load_xml(fn .. ".xml")
     local c = h.root.components.component
     local e, w, t, s = 0, 0, 0, 0
@@ -146,14 +136,14 @@ local function count_mount(model, mount)
 end
 
 local function parse_dockarea(m, dock)
-    local fn = index.macro[m]
+    local fn = index.macro[m][2]
     local h = load_xml(fn .. ".xml")
     m = h.root.macros.macro
     local p = m.properties
     local con = m.connections.connection
 
     local function parse_dock(m, i)
-        fn = index.macro[m]
+        fn = index.macro[m][2]
         h = load_xml(fn .. ".xml")
         m = h.root.macros.macro
         local p = m.properties
@@ -174,7 +164,7 @@ local function parse_dockarea(m, dock)
 end
 
 local function parse_storage(m, cargo)
-    local fn = index.macro[m]
+    local fn = index.macro[m][2]
     local h = load_xml(fn .. ".xml")
     local p = h.root.macros.macro.properties
     local c = p.cargo._attr
@@ -184,7 +174,7 @@ local function parse_storage(m, cargo)
 end
 
 local function parse_shipstorage(m, hangar)
-    local fn = index.macro[m]
+    local fn = index.macro[m][2]
     local h = load_xml(fn .. ".xml")
     local p = h.root.macros.macro.properties
     local t = p.docksize._attr.tags
@@ -200,9 +190,13 @@ local function t2csv(v, t)
 end
 
 local function parse_shield(m)
---    print(m._attr.name, m._attr.class)
-    local t = {}
+    print(m._attr.name, m._attr.class)
+    if 1 == m._attr.name:find("test") then
+        return
+    end
+
     local prop = m.properties
+    local t = {}
 
     local p = prop.identification._attr
     local fmt = "%s\r[%s]"
@@ -214,10 +208,9 @@ local function parse_shield(m)
     p = prop.recharge._attr
     table.insert(t, p.max)
     table.insert(t, p.rate)
-    table.insert(t, p.delay)
-
-    -- time to full charge (LibreOffice Calc time format)
-    table.insert(t, (p.max / p.rate / 86400))
+    -- (LibreOffice Calc time format)
+    table.insert(t, p.delay / 86400)
+    table.insert(t, p.max / p.rate / 86400) -- delay to recharge
 
     p = prop.hull._attr
     table.insert(t, (p.max or "--"))
@@ -226,23 +219,54 @@ local function parse_shield(m)
 
     table.insert(t, m._attr.name)
 
---    header["shield"].f_handle:write(table.concat(t, "\t"), "\n")
     t2csv("shield", t)
 end
 
-local function parse_engine(m)
-    --    print(m._attr.name, m._attr.class)
-    local t = {}
-    local prop = m.properties
 
+local function parse_thruster(m)
+    local prop = m.properties
+    local t = {}
+
+    local p = prop.identification and prop.identification._attr or {}
+    local fmt = "%s\r[%s]"
+    local pn = p.name
+    table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
+    table.insert(t, (p.mk or "--"))
+
+    p = prop.thrust and prop.thrust._attr or {}
+    table.insert(t, (p.strafe or "--"))
+    table.insert(t, (p.pitch or "--"))
+    table.insert(t, (p.yaw or "--"))
+    table.insert(t, (p.roll or "--"))
+
+    p = prop.angular and prop.angular._attr or {}
+    table.insert(t, (p.pitch or "--"))
+    table.insert(t, (p.roll or "--"))
+
+    table.insert(t, m._attr.name)
+
+    t2csv("thruster", t)
+end
+
+local function parse_engine(m)
+    print(m._attr.name, m._attr.class)
+    local prop = m.properties
+    local virt =  prop.component and prop.component._attr.virtual
+    if virt and "1" == virt then
+        parse_thruster(m)
+        return
+    end
+    local t = {}
+    
     local p = prop.identification and prop.identification._attr or {}
     local fmt = "%s\r[%s]"
     local pn = p.basename
     table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
     table.insert(t, (p.mk or "--"))
 
-    -- hack: engine_arg_s_combat_01_mk1_macro
-    --           cut---\ /---cut
+--  hack: cut engine class from macro name
+--  engine_arg_s_combat_01_mk1_macro
+--      cut---\ /---cut
     local sz = m._attr.name:gsub("engine_..._(..-)_.+", "%1")
     sz = (#sz > 2) and "--" or sz:upper()
     table.insert(t, sz)
@@ -268,35 +292,7 @@ local function parse_engine(m)
 
     table.insert(t, m._attr.name)
 
---    header["engine"].f_handle:write(table.concat(t, "\t"), "\n")
     t2csv("engine", t)
-end
-
-local function parse_thruster(m)
-    --print(m._attr.name, m._attr.class)
-    local t = {}
-    local prop = m.properties
-
-    local p = prop.identification and prop.identification._attr or {}
-    local fmt = "%s\r[%s]"
-    local pn = p.name
-    table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
-    table.insert(t, (p.mk or "--"))
-
-    p = prop.thrust and prop.thrust._attr or {}
-    table.insert(t, (p.strafe or "--"))
-    table.insert(t, (p.pitch or "--"))
-    table.insert(t, (p.yaw or "--"))
-    table.insert(t, (p.roll or "--"))
-
-    p = prop.angular and prop.angular._attr or {}
-    table.insert(t, (p.pitch or "--"))
-    table.insert(t, (p.roll or "--"))
-
-    table.insert(t, m._attr.name)
-
---    header["thruster"].f_handle:write(table.concat(t, "\t"), "\n")
-    t2csv("thruster", t)
 end
 
 local word2class = {
@@ -308,6 +304,10 @@ local word2class = {
 }
 
 local function parse_ship(m)
+    if 1 == m._attr.name:find("dummy") then
+        return
+    end
+
     print(m._attr.class, m._attr.name)
     local t = {}
 
@@ -431,15 +431,13 @@ local function parse_ship(m)
 
     table.insert(t, m._attr.name)
 
---    header["ship"].f_handle:write("\"", table.concat(t, "\";\""), "\"\n")
     t2csv("ship", t)
 end
 
 
-local function parse_macro(macro)
+local function parse_macro(macro, class)
     local m = macro._attr
-    if m then
-        local class = m.class
+--    if m then
         if "shieldgenerator" == class then
             if 1 ~= m.name:find("test") then
                 parse_shield(macro)
@@ -455,24 +453,37 @@ local function parse_macro(macro)
                 parse_ship(macro)
             end
         end
-    end
+--    end
 end
 
+local check_macro = {
+    ["shieldgenerator"] = parse_shield,
+    ["engine"] = parse_engine,
+    ["ship_xs"] = parse_ship,
+    ["ship_s"] = parse_ship,
+    ["ship_m"] = parse_ship,
+    ["ship_l"] = parse_ship,
+    ["ship_xl"] = parse_ship,
+    ["NO_CLASS"] = nil
+}
 
 local function parse_start()
-    for _, value in pairs(index.macro) do
-        local h = load_xml(value .. ".xml")
-        local macro = h and h.root.macros and h.root.macros.macro
-        if macro then
+    for k, v in pairs(index.macro) do
+        local f = check_macro[v[1]]
+        if f then
+            local h = load_xml(v[2] .. ".xml")
+            local macro = h.root.macros.macro
             local count = #macro
             if 0 == count then
-                parse_macro(macro)
+                f(macro)
             else
-                for j = 1, count do
-                    parse_macro(macro[j])
-                end
+                -- all needed macros are in single file
+                --for j = 1, count do
+                --    f(macro[j])
+                --end
             end
         end
+
     end
 end
 
