@@ -34,7 +34,9 @@ header["ship"] = {
 --[[ lang stuff ]]-------------------------------------------------------------
 
 local L1 = require(conf.lang1)
-local L2 = require(conf.lang2)
+local L2 = conf.lang2 and require(conf.lang2)
+
+local FMT = L2 and "%s\r[%s]" or "%s"
 
 local function L_get(p, t, l)
     local function Lget(_, b, c)
@@ -61,7 +63,7 @@ local function L_get(p, t, l)
 end
 
 local function L2_get(p)
-    return L_get(p, nil, true)
+    return L2 and L_get(p, nil, true) or ""
 end
 
 
@@ -199,9 +201,9 @@ local function parse_shield(m)
     local t = {}
 
     local p = prop.identification._attr
-    local fmt = "%s\r[%s]"
+--    local fmt = "%s\r[%s]"
     local pn = p.name
-    table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
     table.insert(t, p.makerrace)
     table.insert(t, p.mk)
 
@@ -228,9 +230,9 @@ local function parse_thruster(m)
     local t = {}
 
     local p = prop.identification and prop.identification._attr or {}
-    local fmt = "%s\r[%s]"
+--    local fmt = "%s\r[%s]"
     local pn = p.name
-    table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
     table.insert(t, (p.mk or "--"))
 
     p = prop.thrust and prop.thrust._attr or {}
@@ -259,9 +261,9 @@ local function parse_engine(m)
     local t = {}
     
     local p = prop.identification and prop.identification._attr or {}
-    local fmt = "%s\r[%s]"
+--    local fmt = "%s\r[%s]"
     local pn = p.basename
-    table.insert(t, pn and fmt:format(L_get(pn), L2_get(pn)) or "--")
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
     table.insert(t, (p.mk or "--"))
 
 --  hack: cut engine class from macro name
@@ -348,12 +350,12 @@ local function parse_ship(m)
 
     local p = prop.identification and prop.identification._attr or {}
     local b, s = p.basename, p.shortvariation
-    local fmt = "%s\r[%s]"
+--    local fmt = "%s\r[%s]"
     if b and s then
-        table.insert(t, fmt:format(L_get(b), L2_get(b)))
-        table.insert(t, fmt:format(L_get(s), L2_get(s)))
+        table.insert(t, FMT:format(L_get(b), L2_get(b)))
+        table.insert(t, FMT:format(L_get(s), L2_get(s)))
     else
-        table.insert(t, fmt:format(L_get(p.name), L2_get(p.name)))
+        table.insert(t, FMT:format(L_get(p.name), L2_get(p.name)))
         table.insert(t, "--")
     end
 
