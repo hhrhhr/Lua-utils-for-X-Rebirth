@@ -1,4 +1,5 @@
 local conf = require("x4_config")
+local vfs = require("x4_vfs")
 
 local header = {}
 header["shield"] = {
@@ -29,12 +30,35 @@ header["ship"] = {
         "drag_fwd", "drag_rev", "drag_strafe", "drag_PYR", "macro"
     }
 }
-
+header["weapon"] = {
+    f_handle = 0, str = {
+        "basename", "bullet", "reenable", "rot_speed", "rot_accel", "macro"
+    }
+}
+header["missile"] = {
+    f_handle = 0, str = {
+        "basename", "amount", "lifetime", "range", "guided", "tags", "damage",
+        "reload", "resilience", "mass", "i_PY", "i_R", "d_fwd", "d_rev",
+        "d_strafe", "d_PY", "d_R", "engine", "macro"
+    }
+}
+header["turret"] = {
+    f_handle = 0, str = {
+        "basename", "bullet", "rot_speed", "reload_rate", "macro"
+    }
+}
+header["bullet"] = {
+    f_handle = 0, str = {
+        "macro", "speed", "lifetime", "range", "amount", "barrelamount",
+        "maxhits", "ricochet", "scale", "attach", "heat", "reload_time",
+        "damage", "system"
+    }
+}
 
 --[[ lang stuff ]]-------------------------------------------------------------
 
-local L1 = require(conf.lang1)
-local L2 = conf.lang2 and require(conf.lang2)
+local L1 = require("0001-L0" .. conf.lang1)
+local L2 = conf.lang2 and require("0001-L0" .. conf.lang2)
 
 local FMT = L2 and "%s\r[%s]" or "%s"
 
@@ -78,19 +102,13 @@ local xml_tree = require("xmlhandler.tree")
 --end
 
 local function load_xml(filename)
-    local xml_to_load = conf.res_dir .. conf.sep .. filename
     local xml, handler
-    local f = io.open(xml_to_load, "rb")
-    if f then
-        xml = f:read("a")
-        f:close()
-    else
-        xml = ""
+    xml = vfs:get_file(filename)
+    if xml then
+        handler = xml_tree:new()
+        local parser = xml2lua.parser(handler)
+        parser:parse(xml)
     end
-    handler = xml_tree:new()
-    local parser = xml2lua.parser(handler)
-    parser:parse(xml)
-
     return handler
 end
 
@@ -100,14 +118,7 @@ end
 local index
 
 local function parse_index()
-    index = io.open("index.luac")
-    if not index then
-        print("generate index...")
-        dofile("x4_parse_index.lua")
-    else
-        index:close()
-    end
-    index = loadfile("index.luac")()
+    index = loadfile("x4_index.lua")()
 end
 
 local function check_zero(val)
@@ -192,7 +203,7 @@ local function t2csv(v, t)
 end
 
 local function parse_shield(m)
-    print(m._attr.name, m._attr.class)
+--    print(m._attr.name, m._attr.class)
     if 1 == m._attr.name:find("test") then
         return
     end
@@ -226,6 +237,7 @@ end
 
 
 local function parse_thruster(m)
+--    print(m._attr.name, m._attr.class)
     local prop = m.properties
     local t = {}
 
@@ -251,7 +263,7 @@ local function parse_thruster(m)
 end
 
 local function parse_engine(m)
-    print(m._attr.name, m._attr.class)
+--    print(m._attr.name, m._attr.class)
     local prop = m.properties
     local virt =  prop.component and prop.component._attr.virtual
     if virt and "1" == virt then
@@ -259,7 +271,7 @@ local function parse_engine(m)
         return
     end
     local t = {}
-    
+
     local p = prop.identification and prop.identification._attr or {}
 --    local fmt = "%s\r[%s]"
     local pn = p.basename
@@ -310,7 +322,7 @@ local function parse_ship(m)
         return
     end
 
-    print(m._attr.class, m._attr.name)
+--    print(m._attr.class, m._attr.name)
     local t = {}
 
     local hangar = {["dock_m"] = 0, ["dock_s"] = 0, ["dock_xs"] = 0}
@@ -436,31 +448,194 @@ local function parse_ship(m)
     t2csv("ship", t)
 end
 
+local function parse_weapon(m)
+    print(m._attr.name, m._attr.class)
+    local prop = m.properties
+    local t = {}
+
+    local p = prop.identification._attr
+    local pn = p.name
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
+
+    p = prop.bullet._attr
+    table.insert(t, p.class)
+
+    p = prop.heat and prop.heat._attr or {}
+--    table.insert(t, p.overheat or "--")  -- = 10000
+--    table.insert(t, p.cooldelay or "--") -- = 1.13
+--    table.insert(t, p.coolrate or "--")  -- = 2000
+    table.insert(t, p.reenable or "--")
+
+    p = prop.rotationspeed and prop.rotationspeed._attr or {}
+    table.insert(t, p.max or "--")
+
+    p = prop.rotationacceleration and prop.rotationacceleration._attr or {}
+    table.insert(t, p.max or "--")
+
+--    p = prop.reload and prop.reload._attr or {}
+--    table.insert(t, p.rate or "--")
+--    table.insert(t, p.time or "--")
+
+    table.insert(t, m._attr.name)
+
+    t2csv("weapon", t)
+end
+
+local function parse_missile(m)
+    print(m._attr.name, m._attr.class)
+    local prop = m.properties
+    local t = {}
+
+    local p = prop.identification._attr
+    local pn = p.name
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
+
+--    p = prop.ammunition._attr -- always = 1
+--    table.insert(t, p.value)
+
+    p = prop.missile._attr
+    table.insert(t, p.amount)
+--    table.insert(t, p.barrelamount) -- always = 1
+    table.insert(t, p.lifetime)
+    table.insert(t, p.range)
+    table.insert(t, p.guided)
+    table.insert(t, p.tags) -- guided, dumbfire, torpedo
+
+    p = prop.explosiondamage._attr
+    table.insert(t, p.value)
+
+    p = prop.reload._attr
+    table.insert(t, p.time)
+
+--    p = prop.weapon._attr -- missile_guided, missile_dumbfire, torpedo
+--    table.insert(t, p.system)
+
+    p = prop.countermeasure._attr
+    table.insert(t, p.resilience)
+
+    p = prop.physics._attr
+    table.insert(t, p.mass)
+
+    p = prop.physics.inertia._attr
+    table.insert(t, p.pitch)
+--    table.insert(t, p.yaw) -- = pitch
+    table.insert(t, p.roll)
+
+    p = prop.physics.drag._attr
+    table.insert(t, p.forward)
+    table.insert(t, p.reverse)
+    table.insert(t, p.horizontal)
+--    table.insert(t, p.vertical) -- = horizontal
+    table.insert(t, p.pitch)
+--    table.insert(t, p.yaw) -- = pitch
+    table.insert(t, p.roll)
+
+    local con = m.connections.connection
+    if 0 == #con then
+        local ref = con._attr.ref
+        if 1 == ref:find("con_eng") then
+            table.insert(t, con.macro._attr.ref)
+        end
+    else
+        for j = 1, #con do
+            local ref = con[i]._attr.ref
+            if 1 == ref:find("con_eng") then
+                table.insert(t, con[i].macro._attr.ref)
+            end
+        end
+    end
+
+    table.insert(t, m._attr.name)
+
+    t2csv("missile", t)
+end
+
+local function parse_turret(m)
+    print(m._attr.name, m._attr.class)
+    local prop = m.properties
+    local t = {}
+
+    local p = prop.identification._attr
+    local pn = p.name
+    table.insert(t, pn and FMT:format(L_get(pn), L2_get(pn)) or "--")
+
+    p = prop.bullet._attr
+    table.insert(t, p.class)
+
+    p = prop.rotationspeed._attr
+    table.insert(t, p.max)
+
+    p = prop.reload._attr
+    table.insert(t, p.rate)
+--    table.insert(t, p.time) -- = 1 (turret_kha_m_beam_01_mk1_macro = 4)
+
+    table.insert(t, m._attr.name)
+
+    t2csv("turret", t)
+end
+
+local function parse_bullet(m)
+    print(m._attr.name, m._attr.class)
+    local prop = m.properties
+    local t = {}
+
+    table.insert(t, m._attr.name)
+
+    local p = prop.bullet._attr
+    table.insert(t, p.speed or "--")
+    table.insert(t, p.lifetime or "--")
+    table.insert(t, p.range or "--")
+    table.insert(t, p.amount or "--")
+    table.insert(t, p.barrelamount or "--")
+    table.insert(t, p.maxhits or "--")
+    table.insert(t, p.ricochet or "--")
+    table.insert(t, p.scale or "--")
+    table.insert(t, p.attach or "--")
+
+    p = prop.heat and prop.heat._attr
+    table.insert(t, (p and p.initial or "--"))
+
+    p = prop.reload._attr
+    table.insert(t, p.time or "--")
+
+    p = prop.damage._attr
+    table.insert(t, p.value or "--")
+
+    p = prop.weapon and prop.weapon._attr
+    table.insert(t, (p and p.system or "--"))
+
+    t2csv("bullet", t)
+end
 
 local function parse_macro(macro, class)
     local m = macro._attr
 --    if m then
-        if "shieldgenerator" == class then
-            if 1 ~= m.name:find("test") then
-                parse_shield(macro)
-            end
-        elseif "engine" == class then
-            if 1 == m.name:find("eng") then
-                parse_engine(macro)
-            elseif 1 == m.name:find("thr") then
-                parse_thruster(macro)
-            end
-        elseif class and "ship_" == class:sub(1, 5) then
-            if 1 ~= m.name:find("dummy") then
-                parse_ship(macro)
-            end
+    if "shieldgenerator" == class then
+        if 1 ~= m.name:find("test") then
+            parse_shield(macro)
         end
+    elseif "engine" == class then
+        if 1 == m.name:find("eng") then
+            parse_engine(macro)
+        elseif 1 == m.name:find("thr") then
+            parse_thruster(macro)
+        end
+    elseif class and "ship_" == class:sub(1, 5) then
+        if 1 ~= m.name:find("dummy") then
+            parse_ship(macro)
+        end
+    end
 --    end
 end
 
 local check_macro = {
     ["shieldgenerator"] = parse_shield,
     ["engine"] = parse_engine,
+    ["weapon"] = parse_weapon,
+    ["missile"] = parse_missile,
+    ["turret"] = parse_turret,
+    ["bullet"] = parse_bullet,
+--    ["missilelauncher"] = parse_missilelauncher,
     ["ship_xs"] = parse_ship,
     ["ship_s"] = parse_ship,
     ["ship_m"] = parse_ship,
