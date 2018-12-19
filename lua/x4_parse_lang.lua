@@ -1,5 +1,5 @@
 local conf = require("x4_config")
-local l_dir = conf.res_dir .. "/t/"
+local vfs = require("x4_vfs")
 
 local lang = { "07", "33", "34", "39", "44", "49", "55", "81", "82", "86", "88" }
 
@@ -16,15 +16,8 @@ end
 
 for i = 1, #lang do
     print("lang:", lang[i])
-    local xml
-    local f, e = io.open(l_dir .. "0001-L0" .. lang[i] .. ".xml", "rb")
-    if f then
-        xml = f:read("a")
-        f:close()
-    else
-        io.stderr:write(e, "\n")
-        goto skip
-    end
+    local xml = vfs:get_file("t/0001-L0" .. lang[i] .. ".xml")
+    if not xml then goto skip end
     local h = handler:new()
     local parser = xml2lua.parser(h)
     parser.options.stripWS = true
