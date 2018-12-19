@@ -1,4 +1,5 @@
 local conf = require("x4_config")
+local vfs = require("x4_vfs")
 
 local err = io.stderr
 
@@ -8,12 +9,9 @@ local xml2lua = require("xml2lua")
 local xml_tree = require("xmlhandler.tree")
 
 local function load_xml(filename)
-    local xml_to_load = conf.res_dir .. conf.sep .. filename
     local xml, handler
-    local f = io.open(xml_to_load, "rb")
-    if f then
-        xml = f:read("a")
-        f:close()
+    xml = vfs:get_file(filename)
+    if xml then
         handler = xml_tree:new()
         local parser = xml2lua.parser(handler)
         parser:parse(xml)
@@ -27,32 +25,30 @@ local index = { macro = {}, component = {} }
 local cache = {} -- [filename] = bool
 
 local function read_xml(filename, tag, tbl)
-    io.write(filename)
-    
     local h = load_xml(filename)
     local entry = h and h.root.index.entry
 
 --io.write("name\tclass\tfilename\n")
     local count = #entry
     io.write(" : ", count, " elements.\n")
-    
+
     for i = 1, count do
         if i % 10 == 0 then
             io.write("#")
         else
             io.write(".")
         end
-        
+
         local e = entry[i]._attr
         local fn = e.value:gsub("\\\\", "/")
         fn = fn:gsub("\\", "/")
-        
+
         if cache[fn] then
             goto skip
         else
             cache[fn] = true
         end
-        
+
         local th = load_xml(fn .. ".xml")
         if not th then
 --            err:write("xml not found\t", fn, "\n")
@@ -91,25 +87,25 @@ read_xml("index/macros.xml", "macro", index.macro)
 read_xml("index/components.xml", "component", index.component)
 
 local str = {}
-table.insert(str, "local index = {")
-table.insert(str, "macro = {")
+table.insert(str, "# this is generated content")
+table.insert(str, "local index={")
+table.insert(str, "macro={")
 local e = index.macro
 for i = 1, #e do
     local m = e[i]
-    table.insert(str, ("[%q] = { %q, %q },"):format(m[1], m[2], m[3]))
+    table.insert(str, ("[%q]={%q,%q},"):format(m[1], m[2], m[3]))
 end
-table.insert(str, "},")
-table.insert(str, "component = {")
+table.insert(str, "},component={")
 e = index.component
 for i = 1, #e do
     local m = e[i]
-    table.insert(str, ("[%q] = { %q, %q },"):format(m[1], m[2], m[3]))
+    table.insert(str, ("[%q]={%q,%q},"):format(m[1], m[2], m[3]))
 end
-table.insert(str, "} }")
-table.insert(str, "return index")
+table.insert(str, "}}return index")
 
-local chunk = load(table.concat(str, "\n"))
-
-local w = io.open("index.luac", "w+b")
-w:write(string.dump(chunk, true))
+local chunk = table.concat(str, "\n")
+--chunk = load(chunk)
+--chunk = string.dump(chunk, true)
+local w = io.open("x4_index.lua", "w+b")
+w:write(chunk)
 w:close()
