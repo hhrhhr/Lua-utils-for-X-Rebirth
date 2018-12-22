@@ -12,6 +12,10 @@ local function load_xml(filename)
     local xml, handler
     xml = vfs:get_file(filename)
     if xml then
+        -- cut UTF BOM
+        if "\xEF\xBB\xBF" == xml:sub(1, 3) then
+            xml = xml:sub(4)
+        end
         handler = xml_tree:new()
         local parser = xml2lua.parser(handler)
         parser:parse(xml)
@@ -28,7 +32,6 @@ local function read_xml(filename, tag, tbl)
     local h = load_xml(filename)
     local entry = h and h.root.index.entry
 
---io.write("name\tclass\tfilename\n")
     local count = #entry
     io.write(" : ", count, " elements.\n")
 
