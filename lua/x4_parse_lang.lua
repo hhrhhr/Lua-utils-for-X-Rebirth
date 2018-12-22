@@ -11,7 +11,11 @@ local handler = require("xmlhandler.tree")
 
 local out
 local function wr(k, v)
-    out:write("[" .. k .. "]=[=[" .. v .. "]=],\n")
+    if v then
+        out:write("[" .. k .. "]=[=[" .. v .. "]=],\n")
+    else
+        out:write(k)
+    end
 end
 
 for i = 1, #lang do
@@ -27,13 +31,13 @@ for i = 1, #lang do
 
     out = assert(io.open("0001-L0" .. lang[i] .. ".lua", "wb"))
     local l = h.root.language
-    out:write("local lang={\n")
+    wr("local lang={\n")
 
     local page = l.page
     for i = 1, #page do
         local p = page[i]
         local pid = p._attr.id
-        out:write("-- page\n[" .. pid .. "]={\n")
+        wr("-- page\n[" .. pid .. "]={\n")
         local t = p.t
         if #t > 1 then
             for j = 1, #t do
@@ -43,9 +47,9 @@ for i = 1, #lang do
         else
             wr(t._attr.id, t[1])
         end
-        out:write("}, -- page[" .. pid .. "]\n")
+        wr("}, -- page[" .. pid .. "]\n")
     end
-    out:write("} -- lang\nreturn lang\n")
+    wr("} -- lang\nreturn lang\n")
     out:close()
 
     ::skip::
